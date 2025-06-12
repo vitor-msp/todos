@@ -49,6 +49,10 @@ Content-Type: application/json
 
 ###
 
+DELETE {{base_url}}/todos/1 HTTP/1.1
+
+###
+
 GET {{base_url}}/todos/1 HTTP/1.1
 
 ###
