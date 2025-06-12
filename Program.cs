@@ -1,32 +1,48 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Todos;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase("Todos"));
+builder.Services.ConfigureDbContext(builder.Configuration);
 var app = builder.Build();
 
 app.MapPost("/todos", async ([FromBody] Todo input, AppDbContext context) =>
 {
-    var existingTodo = await context.Todos.FirstOrDefaultAsync(t => t.Name.Equals(input.Name));
-    if (existingTodo is not null) return Results.Conflict();
-    context.Add(input);
-    await context.SaveChangesAsync();
-    return Results.Created($"/todos/{input.Id}", input);
+    try
+    {
+        context.Add(input);
+        await context.SaveChangesAsync();
+        return Results.Created($"/todos/{input.Id}", input);
+    }
+    catch (Exception)
+    {
+        var existingTodo = await context.Todos.FirstOrDefaultAsync(t => t.Name.Equals(input.Name));
+        if (existingTodo is not null) return Results.Conflict();
+        throw;
+    }
 });
 
 app.MapPut("/todos/{id}", async ([FromRoute] int id, [FromBody] Todo input, AppDbContext context) =>
 {
-    if (input.Id != default && id != input.Id) return Results.UnprocessableEntity();
-    var savedTodo = await context.Todos.FindAsync(id);
-    if (savedTodo is null) return Results.NotFound();
-    if (!savedTodo.Name.Equals(input.Name))
+    try
     {
-        var todoWithSameName = await context.Todos.FirstOrDefaultAsync(t => t.Name.Equals(input.Name));
-        if (todoWithSameName is not null) return Results.Conflict();
+        if (input.Id != default && id != input.Id) return Results.UnprocessableEntity();
+        input.Id = id;
+        context.Attach(input).State = EntityState.Modified;
+        await context.SaveChangesAsync();
+        return Results.NoContent();
     }
-    savedTodo.Update(input);
-    await context.SaveChangesAsync();
-    return Results.NoContent();
+    catch (Exception)
+    {
+        var savedTodo = await context.Todos.FindAsync(id);
+        if (savedTodo is null) return Results.NotFound();
+        if (!savedTodo.Name.Equals(input.Name))
+        {
+            var todoWithSameName = await context.Todos.FirstOrDefaultAsync(t => t.Name.Equals(input.Name));
+            if (todoWithSameName is not null) return Results.Conflict();
+        }
+        throw;
+    }
 });
 
 app.MapPatch("/todos/{id}", async ([FromRoute] int id, [FromBody] UpdateTodoInput input, AppDbContext context) =>
